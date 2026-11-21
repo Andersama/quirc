@@ -131,6 +131,14 @@ struct quirc_code {
 	uint8_t			cell_bitmap[QUIRC_MAX_BITMAP];
 };
 
+struct _quirc_datastream {
+	uint8_t		*raw;
+	int		data_bits;
+	int		ptr;
+
+	uint8_t         data[QUIRC_MAX_PAYLOAD];
+};
+
 /* This structure holds the decoded QR-code data */
 struct quirc_data {
 	/* Various parameters of the QR-code. These can mostly be
@@ -153,6 +161,9 @@ struct quirc_data {
 
 	/* ECI assignment number */
 	uint32_t		eci;
+
+	/* Scratch buffer when decoding data */
+	struct _quirc_datastream ds;
 };
 
 /* Return the number of QR-codes identified in the last processed

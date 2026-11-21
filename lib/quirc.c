@@ -25,7 +25,7 @@ const char *quirc_version(void)
 
 struct quirc *quirc_new(void)
 {
-	struct quirc *q = malloc(sizeof(*q));
+	struct quirc *q = ps_malloc(sizeof(*q));
 
 	if (!q)
 		return NULL;
@@ -36,7 +36,8 @@ struct quirc *quirc_new(void)
 
 void quirc_destroy(struct quirc *q)
 {
-	free(q->image);
+	if (q->image)
+		free(q->image);
 	/* q->pixels may alias q->image when their type representation is of the
 	   same size, so we need to be careful here to avoid a double free */
 	if (!QUIRC_PIXEL_ALIAS_IMAGE)
@@ -66,7 +67,7 @@ int quirc_resize(struct quirc *q, int w, int h)
 	 * alloc a new buffer for q->image. We avoid realloc(3) because we want
 	 * on failure to be leave `q` in a consistant, unmodified state.
 	 */
-	image = calloc(w, h);
+	image = ps_calloc((size_t)w * (size_t)h,1);
 	if (!image)
 		goto fail;
 
@@ -91,7 +92,7 @@ int quirc_resize(struct quirc *q, int w, int h)
 
 	/* alloc a new buffer for q->pixels if needed */
 	if (!QUIRC_PIXEL_ALIAS_IMAGE) {
-		pixels = calloc(newdim, sizeof(quirc_pixel_t));
+		pixels = ps_calloc(newdim * sizeof(quirc_pixel_t),1);
 		if (!pixels)
 			goto fail;
 	}
@@ -119,7 +120,7 @@ int quirc_resize(struct quirc *q, int w, int h)
 	if (vars_byte_size / sizeof(*vars) != num_vars) {
 		goto fail; /* size_t overflow */
 	}
-	vars = malloc(vars_byte_size);
+	vars = ps_malloc(vars_byte_size);
 	if (!vars)
 		goto fail;
 
