@@ -63,11 +63,21 @@ int quirc_resize(struct quirc *q, int w, int h)
 	if (w < 0 || h < 0)
 		goto fail;
 
+	size_t pixel_count = (size_t)w * (size_t)h;
+	/*
+	* alloc a buffer for thresholding on top of image
+	* we want to create 16x16 blocks, ergo per 256 elements we need 1 value
+	* but we also want to make sure any weird remainder values are covered so
+	* we need ever so slightly more for those*
+	*/
+	size_t t_space = ((size_t)w>>4 + ((w&0xf)>0)) * ((size_t)h>>4 + ((h&0xf)>0));
+		//pixel_count >> 8;
+	
 	/*
 	 * alloc a new buffer for q->image. We avoid realloc(3) because we want
 	 * on failure to be leave `q` in a consistant, unmodified state.
 	 */
-	image = ps_calloc((size_t)w * (size_t)h,1);
+	image = ps_calloc(pixel_count+t_space,1);
 	if (!image)
 		goto fail;
 

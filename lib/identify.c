@@ -287,7 +287,7 @@ static void flood_fill_seed(struct quirc *q,
 /************************************************************************
  * Adaptive thresholding
  */
-
+#if 0
 static uint8_t otsu(const struct quirc *q)
 {
 	size_t num_pixels = quirc_pixel_count(q);
@@ -297,6 +297,21 @@ static uint8_t otsu(const struct quirc *q)
 	(void)memset(histogram, 0, sizeof(histogram));
 	uint8_t* ptr = q->image;
 	size_t length = num_pixels;
+	size_t idx    = 0;
+	 
+	while ((ptr & 0x3) && length--) {
+		uint8_t value = *ptr++;
+		histogram[value]++;
+		++idx;
+	}
+	while (length>3) {
+		uint32_t value = *(uint32_t*)ptr;
+		ptr+=4;
+		histogram[value&0xff]++;
+		histogram[(value>>8)&0xff]++;
+		histogram[(value>>16)&0xff]++;
+		histogram[(value>>24)&0xff]++;
+	}
 	while (length--) {
 		uint8_t value = *ptr++;
 		histogram[value]++;
@@ -336,6 +351,149 @@ static uint8_t otsu(const struct quirc *q)
 		}
 	}
 
+	return threshold;
+}
+#endif
+/* QRCodes contain somewhere on the order a maximum of ~9000 bytes across a potential 177x177 grid. 
+* [177 x 177 = 31,329]. This means the qrcode roughly loses 3/4ths of the data to redundancy and error
+* correction. But that cost is incredibly useful because it makes qrcodes resistant to "damage".
+* The problem is that "damage" is at the bit level of the qrcode, in order to reach that point, we
+* need as reliable a method as possible to extract the qrcode's grid out of the image.
+* The current quirc library has issues with glare and shadows, this would make sense since it
+* estimates one single threshold value across an entire image. Shadows and glare are effectively "damage"
+* except that they're on the camera level, the stage before the library even begins to work with the qrcode.
+* With quirc that impacts the library's ability to extract the qrcode's grid as a whole.
+* 
+* Ergo we need a computationally "cheap" shadow and glare compensation method which otsu does not provide.
+* This function effectively calculates ostu thresholds in an NxN grid, where we assume that we can interpolate
+* the threshold values. Ideally this means we can reject certain grids from influencing the qrcode scan.
+*
+* So long as we stay at over a 16x16 grid the computational complexity scales linearly with the size of the image.
+*/
+#define OTSU_STEP_SIZE 16
+static uint8_t ostu_block(const struct quirc *q, size_t* g_histogram, uint8_t* histogram, uint32_t x, uint32_t y)
+{
+	const uint32_t w_step = OTSU_STEP_SIZE;
+	const uint32_t h_step = OTSU_STEP_SIZE;
+
+	uint8_t* ptr = q->image;
+	size_t w = q->w;
+	size_t h = q->h;
+	size_t num_pixels = w * h;
+	size_t length = num_pixels;
+
+
+	(void)memset(histogram, 0, sizeof(histogram));
+
+	// Initial fill
+	for (uint32_t yi = 0; yi < h_step && (y+yi)<h; yi++) {
+		for (uint32_t xi = 0; xi < w_step && (x+xi)<w; xi++) {
+			uint8_t value = ptr[(y+yi)*w+(xi+x)];
+			histogram[value]++;
+			g_histogram[value]++;
+		}
+	}
+
+	// Calculate weighted sum of histogram values 
+	quirc_float_t sum = (quirc_float_t)0;
+	unsigned int i = 0;
+	for (i = 0; i <= UINT8_MAX; ++i) {
+		sum += (quirc_float_t)i * histogram[i];
+	}
+
+	// Compute threshold
+	quirc_float_t sumB = (quirc_float_t)0;
+	size_t q1 = 0;
+	quirc_float_t max = (quirc_float_t)0;
+	uint8_t threshold = 0;
+	for (i = 0; i <= UINT8_MAX; ++i) {
+		// Weighted background
+		q1 += histogram[i];
+		if (q1 == 0)
+			continue;
+
+		// Weighted foreground
+		const size_t q2 = num_pixels - q1;
+		if (q2 == 0)
+			break;
+
+		sumB += (quirc_float_t)i * histogram[i];
+		const quirc_float_t m1 = sumB / q1;
+		const quirc_float_t m2 = (sum - sumB) / q2;
+		const quirc_float_t m1m2 = m1 - m2;
+		const quirc_float_t variance = m1m2 * m1m2 * q1 * q2;
+		if (variance >= max) {
+			threshold = i;
+			max = variance;
+		}
+	}
+	size_t wsz = w;
+	size_t hsz = h;
+	size_t pixel_count = wsz * hsz;
+	size_t gwsz = (wsz>>4) + (wsz&0xf)>0;
+	//size_t ghsz = (hsz>>4) + (hsz&0xf)>0; 
+	size_t grid_idx = (y>>4)*gwsz + (x>>4);
+
+	q->image[pixel_count+grid_idx] = threshold;
+}
+
+static uint8_t otsu(const struct quirc *q)
+{
+	size_t num_pixels = quirc_pixel_count(q);
+	size_t g_histogram[UINT8_MAX + 1];
+	// Calculate histogram
+	uint8_t s_histogram[UINT8_MAX + 1]; //16x16
+		
+	(void)memset(g_histogram, 0, sizeof(g_histogram));
+
+	size_t w = q->w;
+	size_t h = q->h;
+	
+	// const size_t step_gaurd = OTSU_STEP_SIZE-1;
+
+	/* Walk each OTSU_STEP_SIZExOTSU_STEP_SIZE block */
+	for (size_t y = 0; y < h; y += OTSU_STEP_SIZE) {
+		for (uint32_t x = 0; x < w; x += OTSU_STEP_SIZE) {
+			ostu_block(q,g_histogram,s_histogram,x,y);
+		}
+		//if (x < w)
+		//	otsu_block(q,g_histogram,s_histogram,x,y);
+	}
+
+	// Calculate weighted sum of histogram values 
+	quirc_float_t sum = (quirc_float_t)0;
+	unsigned int i = 0;
+	for (i = 0; i <= UINT8_MAX; ++i) {
+		sum += (quirc_float_t)i * g_histogram[i];
+	}
+
+	// Compute threshold
+	quirc_float_t sumB = (quirc_float_t)0;
+	size_t q1 = 0;
+	quirc_float_t max = (quirc_float_t)0;
+	uint8_t threshold = 0;
+	for (i = 0; i <= UINT8_MAX; ++i) {
+		// Weighted background
+		q1 += g_histogram[i];
+		if (q1 == 0)
+			continue;
+
+		// Weighted foreground
+		const size_t q2 = num_pixels - q1;
+		if (q2 == 0)
+			break;
+
+		sumB += (quirc_float_t)i * g_histogram[i];
+		const quirc_float_t m1 = sumB / q1;
+		const quirc_float_t m2 = (sum - sumB) / q2;
+		const quirc_float_t m1m2 = m1 - m2;
+		const quirc_float_t variance = m1m2 * m1m2 * q1 * q2;
+		if (variance >= max) {
+			threshold = i;
+			max = variance;
+		}
+	}
+	
 	return threshold;
 }
 
@@ -692,7 +850,7 @@ static void measure_grid_size(struct quirc *q, int index)
 
 /* Read a cell from a grid using the currently set perspective
  * transform. Returns +/- 1 for black/white, 0 for cells which are
- * out of image bounds.
+ * out of image bounds. (or unclear from thresholds?)
  */
 static int read_cell(const struct quirc *q, int index, int x, int y)
 {
@@ -700,10 +858,11 @@ static int read_cell(const struct quirc *q, int index, int x, int y)
 	struct quirc_point p;
 
 	perspective_map(qr->c, x + (quirc_float_t)0.5, y + (quirc_float_t)0.5, &p);
-	if (p.y < 0 || p.y >= q->h || p.x < 0 || p.x >= q->w)
+	uint8_t c;
+	if (p.y < 0 || p.y >= q->h || p.x < 0 || p.x >= q->w || (c=q->pixels[p.y * q->w + p.x])==QUIRC_PIXEL_REGION)
 		return 0;
 
-	return q->pixels[p.y * q->w + p.x] ? 1 : -1;
+	return c ? 1 : -1;
 }
 
 static int fitness_cell(const struct quirc *q, int index, int x, int y)
@@ -719,9 +878,11 @@ static int fitness_cell(const struct quirc *q, int index, int x, int y)
 
 			perspective_map(qr->c, x + offsets[u],
 					       y + offsets[v], &p);
-			if (p.y < 0 || p.y >= q->h || p.x < 0 || p.x >= q->w)
+			
+			uint8_t c;
+			if (p.y < 0 || p.y >= q->h || p.x < 0 || p.x >= q->w || (c=q->pixels[p.y * q->w + p.x])==QUIRC_PIXEL_REGION)
 				continue;
-
+			/* Do we need to tweak this? */
 			if (q->pixels[p.y * q->w + p.x])
 				score++;
 			else
@@ -1079,6 +1240,10 @@ static void test_grouping(struct quirc *q, unsigned int i)
 	test_neighbours(q, i, &hlist, &vlist);
 }
 
+uint8_t pixel_lerp(uint8_t v0, uint8_t v1, float p) {
+	return (uint8_t)(((v1-v0) * p) + v0);
+}
+
 static void pixels_setup(struct quirc *q, uint8_t threshold)
 {
 	if (QUIRC_PIXEL_ALIAS_IMAGE) {
@@ -1087,10 +1252,59 @@ static void pixels_setup(struct quirc *q, uint8_t threshold)
 
 	uint8_t* source = q->image;
 	quirc_pixel_t* dest = q->pixels;
+	uint8_t* thresholds = q->image + ((size_t)q->w*(size_t)q->h);
 	size_t length = quirc_pixel_count(q);
-	while (length--) {
-		uint8_t value = *source++;
-		*dest++ = (value < threshold) ? QUIRC_PIXEL_BLACK : QUIRC_PIXEL_WHITE;
+	size_t w = q->w;
+	size_t h = q->h;
+	size_t bw = (w>>4) + ((w&0xf)>0);
+	size_t bh = (h>>4) + ((h&0xf)>0);
+	size_t idx = 0;
+	uint8_t results[] = {QUIRC_PIXEL_BLACK, QUIRC_PIXEL_REGION, QUIRC_PIXEL_WHITE, 0};
+	for (uint32_t y = 0; y < h; y++) {
+		// NxN block's center is N/2 x N/2
+		// so we need to interpolate based on the low bits of the coordinate
+		// EG: for a 16 x 16 grid, 0-7 is up or left and 8-15 is down or right
+
+		uint32_t by = y >> 4;
+		uint8_t v = (y&0xf)>>3; //1 -> down,  0 -> up
+		int8_t vs = v ? v : -1;
+				
+		uint8_t has_next_block_y = (by+v)<bh;
+
+		for (uint32_t x = 0; x < w; x++) {
+			uint8_t value = *source++;
+			uint32_t bx = x >> 4;
+
+			uint8_t t0 = thresholds[by*bw+bx];
+			uint8_t h = (x&0xf)>>3; //1 -> right, 0 -> left
+			int8_t hs = h ? h : -1;
+			uint8_t has_next_block_x = (bx+h)<bw;
+
+			uint8_t t1 = has_next_block_x ? thresholds[by*bw+(bx+hs)] : threshold;	
+			uint8_t t2 = has_next_block_y ? thresholds[(by+vs)*bw+bx] : threshold;
+			uint8_t t3 = has_next_block_x && has_next_block_y ? thresholds[(by+vs)*bw+(bx+hs)] : threshold;
+
+			float lx;
+			float ly;
+			
+			if (h) {
+				lx = ((x-8)&0xf)/16.0f;
+			} else {
+				lx = ((8-x)&0xf)/16.0f;
+			}
+
+			if (v) {
+				ly = ((y-8)&0xf)/16.0f;
+			} else {
+				ly = ((8-y)&0xf)/16.0f;
+			}
+			uint8_t lerp_x0 = pixel_lerp(t0,t1,lx); //t0 
+			uint8_t lerp_x1 = pixel_lerp(t2,t3,lx);
+			uint8_t thresh  = pixel_lerp(lerp_x0,lerp_x1,ly); //0+0x10
+
+			uint8_t test = (value < thresh) + (value < threshold);
+			*dest++ = results[test];
+		}
 	}
 }
 
