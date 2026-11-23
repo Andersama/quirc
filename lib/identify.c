@@ -313,7 +313,17 @@ static uint8_t otsu(const struct quirc *q)
 	quirc_float_t sumB = (quirc_float_t)0;
 	size_t q1 = 0;
 	quirc_float_t max = (quirc_float_t)0;
-	uint8_t threshold = 0;
+	uint16_t threshold = 0;
+	uint16_t threshold_l = 0;
+
+	// See: https://github.com/odudex/k_quirc/blob/123435b2c46de3b5f624793ab6176102c12bac5d/src/k_quirc_identify.c#L399
+	/* First and last level of the maximum plateau.  A strictly bimodal image
+   * leaves an empty gap between its two levels, and every threshold inside
+   * that gap yields the same partition and therefore the same between-class
+   * variance.  Keeping only the first (or only the last) level would place
+   * the threshold flush against one of the two modes, so a small adaptive
+   * offset is enough to swallow that mode entirely.  Return the midpoint of
+   * the plateau instead, which is the usual Otsu convention. */
 	for (i = 0; i <= UINT8_MAX; ++i) {
 		// Weighted background
 		q1 += histogram[i];
@@ -330,13 +340,18 @@ static uint8_t otsu(const struct quirc *q)
 		const quirc_float_t m2 = (sum - sumB) / q2;
 		const quirc_float_t m1m2 = m1 - m2;
 		const quirc_float_t variance = m1m2 * m1m2 * q1 * q2;
-		if (variance >= max) {
+		if (variance > max) {
 			threshold = i;
+			threshold_l = i;
 			max = variance;
+		} else {
+			/* Empty histogram bins leave wB, wF and sumB untouched, so the
+       		* comparison is exact for the gap of a bimodal image. */
+			threshold = i;
 		}
 	}
 
-	return threshold;
+	return (uint8_t)((threshold+threshold_l) / 2);
 }
 
 static void area_count(void *user_data, int y, int left, int right)
