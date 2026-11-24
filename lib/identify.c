@@ -406,10 +406,10 @@ static uint8_t windowed_threshold(const struct quirc *q) {
 			uint8_t threshold = clamp(result,0.0f,255.0f);
 			//niblack
 			//clamp_float(mean-(stddev*1.of),0.0f,255.0f); //mean + stddev * static_cast<float>(k);
-			q->threshold[(y+khalf)*w + (x+khalf)] = threshold;
-
 			//Remove trailing edge
 			if (cpixels >= kpixels) {
+				q->threshold[(y-khalf)*w + (x+khalf)] = threshold;
+
 				//we just iterated to the "rear" or over
 				//the next item we want to overwrite
 				//ergo remove open_idx off the ring
@@ -420,21 +420,21 @@ static uint8_t windowed_threshold(const struct quirc *q) {
 		}
 	}
 
-	//fill left edge
+	//fill left edge (partial)
 	for (size_t y = khalf; y < (h-khalf); y++) {
 		size_t row = y*w;
 		for (size_t x = 0; x < khalf; x++) {
 			q->threshold[row + x] = q->threshold[row + khalf];
 		}
 	}
-	//fill right edge
-	for (size_t y = h-khalf; y < h; y++) {
+	//fill right edge (partial)
+	for (size_t y = khalf; y < (h-khalf); y++) {
 		size_t row = y*w;
 		for (size_t x = 0; x < khalf; x++) {
 			q->threshold[row + x] = q->threshold[row + (h-khalf)];
 		}
 	}
-	//fill top edge
+	//fill top edge (full)
 	for (size_t y = khalf-1; y < h; --y) {
 		size_t row = y*w;
 		size_t row2 = (khalf)*w;
@@ -442,7 +442,7 @@ static uint8_t windowed_threshold(const struct quirc *q) {
 			q->threshold[row + x] = q->threshold[row2 + x];
 		}
 	}
-	//fill bottom edge
+	//fill bottom edge (full)
 	for (size_t y = h-khalf; y < h; y++) {
 		size_t row = y*w;
 		size_t row2 = (h-khalf)*w;
