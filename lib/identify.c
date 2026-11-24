@@ -349,14 +349,14 @@ static uint8_t windowed_threshold(const struct quirc *q) {
 			size_t sum_sq_edge = 0;
 			size_t row_and_offset = y*w + x;
 			for (size_t xw = 0; xw < kw; xw++) {
-				size_t sample = image[row+xw];
+				size_t sample = image[row_and_offset+xw];
 				sum_edge    += sample;
 				sum_sq_edge += sample*sample;
 			}
 			k_sums[open_idx]    = sum_edge;
 			k_sums_sq[open_idx] = sum_sq_edge;
 			//keep as power of 2 so we can rotate around
-			open_idx = (open_idx+1) & 0xf;
+			open_idx = (open_idx+1) & 0x1f;
 
 			sum    += sum_edge;
 			sum_sq += sum_sq_edge;
@@ -364,15 +364,16 @@ static uint8_t windowed_threshold(const struct quirc *q) {
 			cpixels += kw;
 			//Determine threshold
 
-			float mean     = ((float)sum / (float)cpixels);
+			//float mean     = ((float)sum / (float)cpixels);
 			//float variance = ((float)sum_sq / (float)cpixels) - (mean*mean);
 			//float variance = (sum_sq - ((float)(sum*sum))/(float)cpixels)/(float)cpixels;
 			//float stddev    = sqrt(variance);
 			//Sauvola’s method
 			//float result = mean * (1.0f + .5f * (stddev / (128.0f) - 1.0f));
 			//niblack's method
-			float result = mean; // - stddev;
-			uint8_t threshold = clamp_float(result,0.0f,255.0f);
+			//float result = mean; // - stddev;
+			//uint8_t threshold = clamp_float(result,0.0f,255.0f);
+			uint8_t threshold = sum / cpixels;
 			//niblack
 			//clamp_float(mean-(stddev*1.of),0.0f,255.0f); //mean + stddev * static_cast<float>(k);
 			//Remove trailing edge
