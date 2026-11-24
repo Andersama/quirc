@@ -170,3 +170,7 @@ const char *quirc_strerror(quirc_decode_error_t err)
 
 	return "Unknown error";
 }
+
+uint8_t* quirc_pixels(struct quirc *q) {
+	return q->pixels;
+}

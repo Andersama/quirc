@@ -182,6 +182,9 @@ quirc_decode_error_t quirc_decode(const struct quirc_code *code,
 /* Flip a QR-code according to optional mirror feature of ISO 18004:2015 */
 void quirc_flip(struct quirc_code *code);
 
+/* Returns buffer quirc uses for thresholding */
+uint8_t* quirc_pixels(struct quirc *q);
+
 #ifdef __cplusplus
 }
 #endif
