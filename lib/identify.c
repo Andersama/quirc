@@ -372,7 +372,7 @@ static uint8_t windowed_threshold(const struct quirc *q) {
 				// Variance = (sum_sq/n - (sum/n)*(sum/n))
 				float mean     = ((float)sum / (float)cpixels);
 				float variance = ((float)sum_sq / (float)cpixels) - mean*mean;
-				float stddev   = fast_sqrt(variance);
+				float stddev   = sqrt(variance);
 				//Sauvola’s method
 				//float result = mean * (1.0f + .5f * (stddev / (128.0f) - 1.0f));
 				//niblack's method, we subtract for a tighter tolerance for black pixels
