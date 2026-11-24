@@ -370,6 +370,10 @@ static uint8_t windowed_threshold(const struct quirc *q) {
 		sum     = 0;
 		sum_sq  = 0;
 		cpixels = 0;
+		for (size_t n = 0; n < kernal_size; n++) {
+			k_sums[n]    = 0;
+			k_sums_sq[n] = 0;
+		}
 
 		for (size_t y = 0; y < h; y++) {
 			//Add an edge
@@ -395,7 +399,7 @@ static uint8_t windowed_threshold(const struct quirc *q) {
 			float variance = ((float)sum_sq / (float)cpixels) - (mean*mean);
 			float stddev    = sqrt(variance);
 			// + stddev * k; //
-			uint8_t threshold = clamp_float(mean-stddev,0.0f,255.0f); //mean + stddev * static_cast<float>(k);
+			uint8_t threshold = clamp_float(mean-(stddev*.5f),0.0f,255.0f); //mean + stddev * static_cast<float>(k);
 			q->threshold[(y+khalf)*w + (x+khalf)] = threshold;
 
 			//Remove trailing edge
