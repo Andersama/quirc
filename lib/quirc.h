@@ -59,6 +59,8 @@ void quirc_end(struct quirc *q);
 /* Returns the buffer where quirc stored the results of it's threshold pass */
 uint8_t *quirc_pixels(struct quirc *q);
 
+void quirc_set_parameter(struct quirc *q, float f);
+
 /* This structure describes a location in the input image buffer. */
 struct quirc_point {
 	int	x;

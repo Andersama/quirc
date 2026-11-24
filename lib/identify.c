@@ -336,6 +336,7 @@ static uint8_t windowed_threshold(const struct quirc *q) {
 	//EG: we want the majority of memory accesses to be along x
 	//to achieve this we want to move the window along the y axis
 	//so that we add and remove samples along the perpendicular axis x
+	float k = q->k;
 	for (size_t x = 0; x < kwi_limit; x++) {
 		sum     = 0;
 		sum_sq  = 0;
@@ -376,7 +377,7 @@ static uint8_t windowed_threshold(const struct quirc *q) {
 				//Sauvola’s method
 				//float result = mean * (1.0f + .5f * (stddev / (128.0f) - 1.0f));
 				//niblack's method, we subtract for a tighter tolerance for black pixels
-				float result      = mean - stddev; 
+				float result      = mean - (stddev * k); 
 				uint8_t threshold = result < 0.0f ? 0.0f : result;
 
 				thresh[(y-khalf)*w + (x+khalf)] = threshold;
@@ -1271,6 +1272,8 @@ uint8_t *quirc_begin(struct quirc *q, int *w, int *h)
 		*w = q->w;
 	if (h)
 		*h = q->h;
+
+	q->k = 0.5f;
 
 	return q->image;
 }

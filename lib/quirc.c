@@ -162,6 +162,10 @@ int quirc_count(const struct quirc *q)
 	return q->num_grids;
 }
 
+void quirc_set_parameter(struct quirc *q, float f) {
+	q->k = f;
+}
+
 static const char *const error_table[] = {
 	[QUIRC_SUCCESS] = "Success",
 	[QUIRC_ERROR_INVALID_GRID_SIZE] = "Invalid grid size",

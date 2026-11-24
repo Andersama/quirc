@@ -119,6 +119,8 @@ struct quirc {
 
 	size_t      		num_flood_fill_vars;
 	struct quirc_flood_fill_vars *flood_fill_vars;
+
+	float k;
 };
 
 static inline size_t quirc_image_size(int w, int h)
