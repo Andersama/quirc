@@ -396,7 +396,8 @@ static uint8_t windowed_threshold(const struct quirc *q) {
 			//Determine threshold
 
 			float mean     = ((float)sum / (float)cpixels);
-			float variance = ((float)sum_sq / (float)cpixels) - (mean*mean);
+			//float variance = ((float)sum_sq / (float)cpixels) - (mean*mean);
+			float variance = (sum_sq - ((float)(sum*sum))/(float)cpixels)/(float)cpixels;
 			float stddev    = sqrt(variance);
 			// + stddev * k; //
 			uint8_t threshold = clamp_float(mean-(stddev*.5f),0.0f,255.0f); //mean + stddev * static_cast<float>(k);
