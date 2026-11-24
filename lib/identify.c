@@ -320,9 +320,9 @@ static uint8_t windowed_threshold(const struct quirc *q) {
 	size_t sum_sq = 0;
 	
 	uint8_t *image = q->image;
+	uint8_t *thresh = q->threshold;
 	
 	uint32_t open_idx = 0;
-	uint8_t dir_x = 0;
 
 	//How we move the window, NOTE: we add and remove samples
 	//along an edge, so the performance cost is identical aside
@@ -345,19 +345,20 @@ static uint8_t windowed_threshold(const struct quirc *q) {
 
 		for (size_t y = 0; y < h; y++) {
 			//Add an edge
-			size_t sum_edge;
-			size_t sum_sq_edge;
+			size_t sum_edge    = 0;
+			size_t sum_sq_edge = 0;
+			size_t row_and_offset = y*w + x;
 			for (size_t xw = 0; xw < kw; xw++) {
-				size_t sample = image[y*w+(x+xw)];
+				size_t sample = image[row+xw];
 				sum_edge    += sample;
 				sum_sq_edge += sample*sample;
 			}
-			k_sums[open_idx] = sum_edge;
+			k_sums[open_idx]    = sum_edge;
 			k_sums_sq[open_idx] = sum_sq_edge;
 			//keep as power of 2 so we can rotate around
 			open_idx = (open_idx+1) & 0xf;
 
-			sum += sum_edge;
+			sum    += sum_edge;
 			sum_sq += sum_sq_edge;
 			//Track how many pixels are part of the window
 			cpixels += kw;
@@ -376,7 +377,7 @@ static uint8_t windowed_threshold(const struct quirc *q) {
 			//clamp_float(mean-(stddev*1.of),0.0f,255.0f); //mean + stddev * static_cast<float>(k);
 			//Remove trailing edge
 			if (cpixels >= kpixels) {
-				q->threshold[(y-khalf)*w + (x+khalf)] = threshold;
+				thresh[(y-khalf)*w + (x+khalf)] = threshold;
 
 				//we just iterated to the "rear" or over
 				//the next item we want to overwrite
