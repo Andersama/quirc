@@ -371,7 +371,7 @@ static uint8_t windowed_threshold(const struct quirc *q) {
 			//float result = mean * (1.0f + .5f * (stddev / (128.0f) - 1.0f));
 			//niblack's method
 			float result = mean; // - stddev;
-			uint8_t threshold = clamp(result,0.0f,255.0f);
+			uint8_t threshold = clamp_float(result,0.0f,255.0f);
 			//niblack
 			//clamp_float(mean-(stddev*1.of),0.0f,255.0f); //mean + stddev * static_cast<float>(k);
 			//Remove trailing edge
@@ -1237,10 +1237,10 @@ static void pixels_setup(struct quirc *q, uint8_t t)
 	uint8_t* thresh = q->threshold;
 	quirc_pixel_t* dest = q->pixels;
 	//size_t length = quirc_pixel_count(q);
-	size_t w = q->w;
-	size_t h = q->h;
-	size_t wlim = w-16;
-	size_t hlim = h-16;
+	uint32_t w = q->w;
+	uint32_t h = q->h;
+	uint32_t wlim = w-16;
+	uint32_t hlim = h-16;
 	for (uint32_t y = 0; y < h; y++) {
 		for (uint32_t x = 0; x < w; x++) {
 			uint8_t value = *source++;
