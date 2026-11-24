@@ -284,10 +284,164 @@ static void flood_fill_seed(struct quirc *q,
 	}
 }
 
+static float clamp_float(float v, float l, float h) {
+	return v < l ? v : v > h ? h : v;
+}
 /************************************************************************
  * Adaptive thresholding
  */
 
+//see: https://github.com/opencv/opencv_contrib/blob/5.x/modules/ximgproc/src/niblack_thresholding.cpp#L49
+//niblack: thresh = mean + stddev * static_cast<float>(k);
+//sauvola: thresh = mean.mul(1. + static_cast<float>(k) * (stddev / r - 1.));
+//wolf   : ...
+//nick   : ...
+
+static uint8_t windowed_threshold(const struct quirc *q) {
+	//
+	size_t w = q->w;
+	size_t h = q->h;
+
+	
+	size_t cpixels = 0;
+	// kernal size
+	const size_t kernal_size = 32;
+	const uint32_t kw = kernal_size;
+	const uint32_t kh = kernal_size;
+
+	const uint32_t khalf = kernal_size/2;
+	//kernal sums ring buffers
+	size_t kwi_limit = w-kw;
+	size_t khi_limit = h-kh;
+	size_t k_sums[32]    ={};
+	size_t k_sums_sq[32] ={};
+	size_t kpixels = (size_t)kw*(size_t)kh;
+
+	size_t sum = 0;
+	size_t sum_sq = 0;
+	
+	uint8_t *image = q->image;
+	
+	uint32_t open_idx = 0;
+	uint8_t dir_x = 0;
+	#if 0
+	//terrible memory access*
+	for (size_t y = 0; y < khi_limit;) {
+		for (size_t x = 0; x < kwi_limit; x++) {
+			//add column
+			size_t col_sum = 0;
+			size_t col_sum_sq = 0;
+			for (size_t sy = 0; sy < kh; sy++) {
+				size_t val = image[(y+sy)*w+x];
+				col_sum += val;
+				col_sum_sq += val*val;
+			}
+			sum += col_sum;
+			sum_sq += col_sum_sq;
+			k_sums[]
+			//how many pixels are in our kernal window at the momment
+			cpixels += kh;
+			// calculate sum, sum_sq, variance for threshold
+			func()
+			//remove column
+			if (cpixels >= kpixels) {
+				sum -= col_sum;
+				sum -= col_sum_sq;
+				sum 
+			}
+		}
+
+		for (size_t drop = 0; drop < kh; drop++) {
+
+		}
+		dir_x = !dir_x; //change directions
+	}
+	#endif
+	//How we move the window, NOTE: we add and remove samples
+	//along an edge, so the performance cost is identical aside
+	//from memory and memory access patterns.
+	//Typically a scan over a 2D array would be nested y then x*
+	//but here we're iterating x then y because this only controls
+	//the position of the window, the memory access is along the edge
+	//EG: we want the majority of memory accesses to be along x
+	//to achieve this we want to move the window along the y axis
+	//so that we add and remove samples along the perpendicular axis x
+	for (size_t x = 0; x < kwi_limit; x++) {
+		sum     = 0;
+		sum_sq  = 0;
+		cpixels = 0;
+
+		for (size_t y = 0; y < h; y++) {
+			//Add an edge
+			size_t sum_edge;
+			size_t sum_sq_edge;
+			for (size_t xw = 0; xw < kw; xw++) {
+				size_t sample = image[y*w+(x+xw)];
+				sum_edge += sample;
+				sum_sq_edge += sample*sample;
+			}
+			k_sums[open_idx] = sum_edge;
+			k_sums_sq[open_idx] = sum_sq_edge;
+			//keep as power of 2 so we can rotate around
+			open_idx = (open_idx+1) & 0xf;
+
+			sum += sum_edge;
+			sum_sq += sum_sq_edge;
+			//Track how many pixels are part of the window
+			cpixels += kw;
+			//Determine threshold
+
+			float mean     = ((float)sum / (float)cpixels);
+			float variance = ((float)sum_sq / (float)cpixels) - (mean*mean);
+			float stddev    = sqrt(variance);
+			// + stddev * k; //
+			uint8_t threshold = clamp_float(mean-stddev,0.0f,255.0f); //mean + stddev * static_cast<float>(k);
+			q->threshold[(y+khalf)*w + (x+khalf)] = threshold;
+
+			//Remove trailing edge
+			if (cpixels >= kpixels) {
+				//we just iterated to the "rear" or over
+				//the next item we want to overwrite
+				//ergo remove open_idx off the ring
+				sum    -= k_sums[open_idx];
+				sum_sq -= k_sums_sq[open_idx];
+				cpixels -= kw;
+			}
+		}
+	}
+
+	//fill left edge
+	for (size_t y = khalf; y < (h-khalf); y++) {
+		size_t row = y*w;
+		for (size_t x = 0; x < khalf; x++) {
+			q->threshold[row + x] = q->threshold[row + khalf];
+		}
+	}
+	//fill right edge
+	for (size_t y = h-khalf; y < h; y++) {
+		size_t row = y*w;
+		for (size_t x = 0; x < khalf; x++) {
+			q->threshold[row + x] = q->threshold[row + (h-khalf)];
+		}
+	}
+	//fill top edge
+	for (size_t y = khalf-1; y < h; --y) {
+		size_t row = y*w;
+		size_t row2 = (khalf)*w;
+		for (size_t x = khalf; x < w; x++) {
+			q->threshold[row + x] = q->threshold[row2 + x];
+		}
+	}
+	//fill bottom edge
+	for (size_t y = h-khalf; y < h; y++) {
+		size_t row = y*w;
+		size_t row2 = (h-khalf)*w;
+		for (size_t x = 0; x < w; x++) {
+			q->threshold[row + x] = q->threshold[row2 + x];
+		}
+	}
+}
+#if 0
 static uint8_t otsu(const struct quirc *q)
 {
 	size_t num_pixels = quirc_pixel_count(q);
@@ -353,7 +507,7 @@ static uint8_t otsu(const struct quirc *q)
 
 	return (uint8_t)((threshold+threshold_l) / 2);
 }
-
+#endif
 static void area_count(void *user_data, int y, int left, int right)
 {
 	((struct quirc_region *)user_data)->count += right - left + 1;
@@ -1094,17 +1248,19 @@ static void test_grouping(struct quirc *q, unsigned int i)
 	test_neighbours(q, i, &hlist, &vlist);
 }
 
-static void pixels_setup(struct quirc *q, uint8_t threshold)
+static void pixels_setup(struct quirc *q, uint8_t t)
 {
 	if (QUIRC_PIXEL_ALIAS_IMAGE) {
 		q->pixels = (quirc_pixel_t *)q->image;
 	}
 
 	uint8_t* source = q->image;
+	uint8_t* thresh = q->threshold;
 	quirc_pixel_t* dest = q->pixels;
 	size_t length = quirc_pixel_count(q);
 	while (length--) {
 		uint8_t value = *source++;
+		uint8_t threshold = *thresh++;
 		*dest++ = (value < threshold) ? QUIRC_PIXEL_BLACK : QUIRC_PIXEL_WHITE;
 	}
 }
@@ -1127,8 +1283,9 @@ void quirc_end(struct quirc *q)
 {
 	int i;
 
-	uint8_t threshold = otsu(q);
-	pixels_setup(q, threshold);
+	//uint8_t threshold = otsu(q);
+	windowed_threshold(q);
+	pixels_setup(q, 0);
 
 	for (i = 0; i < q->h; i++)
 		finder_scan(q, i);

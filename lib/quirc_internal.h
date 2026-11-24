@@ -104,6 +104,7 @@ struct quirc_flood_fill_vars {
 struct quirc {
 	uint8_t			*image;
 	quirc_pixel_t		*pixels;
+	uint8_t         *threshold;
 	int			w;
 	int			h;
 
