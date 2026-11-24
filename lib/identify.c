@@ -285,7 +285,7 @@ static void flood_fill_seed(struct quirc *q,
 }
 
 static float clamp_float(float v, float l, float h) {
-	return v < l ? v : v > h ? h : v;
+	return (v < l) ? l : (v > h) ? h : v;
 }
 /************************************************************************
  * Adaptive thresholding
@@ -399,8 +399,13 @@ static uint8_t windowed_threshold(const struct quirc *q) {
 			//float variance = ((float)sum_sq / (float)cpixels) - (mean*mean);
 			float variance = (sum_sq - ((float)(sum*sum))/(float)cpixels)/(float)cpixels;
 			float stddev    = sqrt(variance);
-			// + stddev * k; //
-			uint8_t threshold = clamp_float(mean-(stddev*.5f),0.0f,255.0f); //mean + stddev * static_cast<float>(k);
+			//Sauvola’s method
+			//float result = mean * (1.0f + .5f * (stddev / (128.0f) - 1.0f));
+			//niblack's method
+			float result = mean - stddev;
+			uint8_t threshold = clamp(result,0.0f,255.0f);
+			//niblack
+			//clamp_float(mean-(stddev*1.of),0.0f,255.0f); //mean + stddev * static_cast<float>(k);
 			q->threshold[(y+khalf)*w + (x+khalf)] = threshold;
 
 			//Remove trailing edge
