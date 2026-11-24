@@ -431,14 +431,14 @@ static uint8_t windowed_threshold(const struct quirc *q) {
 	for (size_t y = khalf; y < (h-khalf); y++) {
 		size_t row = y*w;
 		for (size_t x = 0; x < khalf; x++) {
-			q->threshold[row + x] = q->threshold[row + (h-khalf)];
+			q->threshold[row + (h-khalf) + x] = q->threshold[row + (h-khalf)];
 		}
 	}
 	//fill top edge (full)
 	for (size_t y = khalf-1; y < h; --y) {
 		size_t row = y*w;
 		size_t row2 = (khalf)*w;
-		for (size_t x = khalf; x < w; x++) {
+		for (size_t x = 0; x < w; x++) {
 			q->threshold[row + x] = q->threshold[row2 + x];
 		}
 	}
