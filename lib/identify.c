@@ -1250,7 +1250,7 @@ static void pixels_setup(struct quirc *q, uint8_t t)
 			uint8_t value = *source++;
 			uint8_t threshold = *thresh++;
 			threshold = (x < 16 || y < 16 || x > wlim || y > hlim) ? t : threshold;
-			*dest++ = (value < threshold) ? QUIRC_PIXEL_BLACK : QUIRC_PIXEL_WHITE;
+			*dest++ = (value < threshold && value < t) ? QUIRC_PIXEL_BLACK : QUIRC_PIXEL_WHITE;
 		}
 	}
 	/*
