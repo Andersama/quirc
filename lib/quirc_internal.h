@@ -19,6 +19,7 @@
 
 #include <assert.h>
 #include <stdlib.h>
+#include <stddef.h>
 
 #include <Arduino.h>
 #include "quirc.h"
