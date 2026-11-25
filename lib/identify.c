@@ -386,7 +386,7 @@ static uint8_t windowed_threshold(const struct quirc *q) {
 
 			if (sizeof(size_t)==8) {
 				sum_edge    += (sum_edge_u16s&0xffff) + ((sum_edge_u16s>>16)&0xffff)
-					+ ((sum_edge_u16s>>32)&0xffff) + ((sample_l>>48)&0xffff);
+					+ ((sum_edge_u16s>>32)&0xffff) + ((sum_edge_u16s>>48)&0xffff);
 			} else {
 				sum_edge    += sum_edge_u16s&0xffff + ((sum_edge_u16s>>16)&0xffff);
 			}
