@@ -140,7 +140,7 @@ static inline size_t quirc_pixel_count(const struct quirc *q)
 }
 
 static inline uint8_t* quirc_align_16(uint8_t* ptr) {
-	return ((size_t)ptr & 0xf) ? (uint8_t*)((size_t)ptr & (~(size_t)0xf)) + 16) : ptr;
+	return ((size_t)ptr & 0xf) ? (uint8_t*)((size_t)ptr & (~(size_t)0xf)) + 16 : ptr;
 }
 
 /************************************************************************
