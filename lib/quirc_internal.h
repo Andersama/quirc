@@ -105,6 +105,11 @@ struct quirc {
 	uint8_t			*image;
 	quirc_pixel_t	*pixels;
 	uint8_t         *threshold;
+
+	uint8_t         *image_16;
+	quirc_pixel_t   *pixels_16;
+	uint8_t         *threshold_16;
+
 	int			w;
 	int			h;
 
@@ -131,6 +136,10 @@ static inline size_t quirc_image_size(int w, int h)
 static inline size_t quirc_pixel_count(const struct quirc *q)
 {
 	return quirc_image_size(q->w, q->h);
+}
+
+static inline uint8_t* quirc_align_16(uint8_t* ptr) {
+	return (ptr & 0xf) ? ((ptr & ~ptrdiff_t{0xf}) + 0x100);
 }
 
 /************************************************************************

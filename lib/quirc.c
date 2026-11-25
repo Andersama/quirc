@@ -70,11 +70,12 @@ int quirc_resize(struct quirc *q, int w, int h)
 	 * alloc a new buffer for q->image. We avoid realloc(3) because we want
 	 * on failure to be leave `q` in a consistant, unmodified state.
 	 */
-	image = ps_calloc((size_t)w * (size_t)h,1);
+	const uint32_t alignment = 16;
+	image = ps_calloc((size_t)w * (size_t)h + alignment,1);
 	if (!image)
 		goto fail;
 
-	thresh = ps_calloc((size_t)w * (size_t)h,1);
+	thresh = ps_calloc((size_t)w * (size_t)h + alignment,1);
 	if (!thresh)
 		goto fail;
 
@@ -95,11 +96,11 @@ int quirc_resize(struct quirc *q, int w, int h)
 	 * new buffer when the new size is smaller, hence the min computation.
 	 */
 	if (min > 0)
-		(void)memcpy(image, q->image, min);
+		(void)memcpy(quirc_align_16(image), q->image_16, min);
 
 	/* alloc a new buffer for q->pixels if needed */
 	if (!QUIRC_PIXEL_ALIAS_IMAGE) {
-		pixels = ps_calloc(newdim * sizeof(quirc_pixel_t),1);
+		pixels = ps_calloc(newdim * sizeof(quirc_pixel_t) + alignment,1);
 		if (!pixels)
 			goto fail;
 	}
@@ -140,11 +141,15 @@ int quirc_resize(struct quirc *q, int w, int h)
 	q->threshold = thresh;
 	if (!QUIRC_PIXEL_ALIAS_IMAGE) {
 		free(q->pixels);
-		q->pixels = pixels;
+		q->pixels    = pixels;
+		q->pixels_16 = quirc_align_16(q->pixels_16);
 	}
 	free(q->flood_fill_vars);
 	q->flood_fill_vars = vars;
 	q->num_flood_fill_vars = num_vars;
+
+	q->image_16     = quirc_align_16(q->image);
+	q->threshold_16 = quirc_align_16(q->threshold);
 
 	return 0;
 	/* NOTREACHED */
@@ -186,5 +191,5 @@ const char *quirc_strerror(quirc_decode_error_t err)
 }
 
 uint8_t* quirc_pixels(struct quirc *q) {
-	return q->pixels;
+	return quirc_align_16(q->pixels);
 }

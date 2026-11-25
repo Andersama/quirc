@@ -139,7 +139,7 @@ static void flood_fill_line(struct quirc *q, int x, int y,
 	int right;
 	int i;
 
-	row = q->pixels + y * q->w;
+	row = q->pixels_16 + y * q->w;
 	QUIRC_ASSERT(row[x] == from);
 
 	left = x;
@@ -217,7 +217,7 @@ static void flood_fill_seed(struct quirc *q,
 	    &stack[stack_size - 1];
 
 	QUIRC_ASSERT(from != to);
-	QUIRC_ASSERT(q->pixels[y0 * q->w + x0] == from);
+	QUIRC_ASSERT(q->pixels_16[y0 * q->w + x0] == from);
 
 	struct quirc_flood_fill_vars *next_vars;
 	int next_left;
@@ -250,7 +250,7 @@ static void flood_fill_seed(struct quirc *q,
 
 		/* Seed new flood-fills */
 		if (vars->y > 0) {
-			row = q->pixels + (vars->y - 1) * q->w;
+			row = q->pixels_16 + (vars->y - 1) * q->w;
 
 			next_vars = flood_fill_call_next(q, row,
 							 from, to,
@@ -262,7 +262,7 @@ static void flood_fill_seed(struct quirc *q,
 		}
 
 		if (vars->y < q->h - 1) {
-			row = q->pixels + (vars->y + 1) * q->w;
+			row = q->pixels_16 + (vars->y + 1) * q->w;
 
 			next_vars = flood_fill_call_next(q, row,
 							 from, to,
@@ -322,9 +322,10 @@ static uint8_t windowed_threshold(const struct quirc *q) {
 	size_t sum = 0;
 	size_t sum_sq = 0;
 	
-	uint8_t *image = q->image;
-	uint8_t *thresh = q->threshold;
-	
+	uint8_t *image  = q->image_16;
+	uint8_t *thresh = q->threshold_16;
+	uint32_t *image32 = image;
+
 	uint32_t open_idx = 0;
 
 	//How we move the window, NOTE: we add and remove samples
@@ -349,14 +350,47 @@ static uint8_t windowed_threshold(const struct quirc *q) {
 
 		for (size_t y = 0; y < h; y++) {
 			//Add an edge
-			size_t sum_edge    = 0;
-			size_t sum_sq_edge = 0;
+			size_t sum_edge      = 0;
+			size_t sum_edge_u16s = 0;
+			size_t sum_sq_edge   = 0;
 			size_t row_and_offset = y*w + x;
-			for (size_t xw = 0; xw < kw; xw++) {
-				size_t sample = image[row_and_offset+xw];
-				sum_edge    += sample;
-				sum_sq_edge += sample*sample;
+			for (size_t xw = 0; xw < kw; xw+=sizeof(size_t)) {
+				size_t sample = (size_t*)image + (row_and_offset+xw);
+				//split 
+				size_t sample_l;
+				size_t sample_h;
+				if (sizeof(size_t)==8) {
+					sample_l = sample & 0x00ff00ff00ff00ff;
+					sample_h = (sample>>8) & 0x00ff00ff00ff00ff;
+					sum_edge_u16s += sample_l + sample_h;
+				} else {
+					sample_l = sample & 0x00ff00ff;
+					sample_h = (sample>>8) & 0x00ff00ff;
+					sum_edge_u16s += sample_l + sample_h;
+				}
+
+				uint32_t byte0 = (sample&0xff);
+				uint32_t byte1 = (sample>>8)&0xff;
+				uint32_t byte2 = (sample>>16)&0xff;
+				uint32_t byte3 = (sample>>24)&0xff;
+				uint32_t byte4 = (sample>>32)&0xff;
+				uint32_t byte5 = (sample>>40)&0xff;
+				uint32_t byte6 = (sample>>48)&0xff;
+				uint32_t byte7 = (sample>>56)&0xff;
+				sum_sq_edge += 
+					byte0*byte0 + byte1*byte1 + 
+					byte2*byte2 + byte3*byte3 +
+					byte4*byte4 + byte5*byte5 +
+					byte6*byte6 + byte7*byte7;
 			}
+
+			if (sizeof(size_t)==8) {
+				sum_edge    += (sum_edge_u16s&0xffff) + ((sum_edge_u16s>>16)&0xffff)
+					+ ((sum_edge_u16s>>32)&0xffff) + ((sample_l>>48)&0xffff);
+			} else {
+				sum_edge    += sum_edge_u16s&0xffff + ((sum_edge_u16s>>16)&0xffff);
+			}
+
 			k_sums[open_idx]    = sum_edge;
 			k_sums_sq[open_idx] = sum_sq_edge;
 			//keep as power of 2 so we can rotate around
@@ -432,11 +466,28 @@ static uint8_t otsu(const struct quirc *q)
 	// Calculate histogram
 	size_t histogram[UINT8_MAX + 1];
 	(void)memset(histogram, 0, sizeof(histogram));
-	uint8_t* ptr = q->image;
+	uint8_t* ptr = q->image_16; //quirc_align_16(q->image);
 	size_t length = num_pixels;
-	while (length--) {
-		uint8_t value = *ptr++;
-		histogram[value]++;
+	while (length>(sizeof(size_t)-1)) {
+		length-=sizeof(size_t);
+		size_t value = *((size_t*)ptr);
+		ptr+=sizeof(size_t);
+		if (sizeof(size_t)==8) {
+			histogram[value&0xff]++;
+			histogram[(value>>8)&0xff]++;
+			histogram[(value>>16)&0xff]++;
+			histogram[(value>>24)&0xff]++;
+
+			histogram[(value>>32)&0xff]++;
+			histogram[(value>>40)&0xff]++;
+			histogram[(value>>48)&0xff]++;
+			histogram[(value>>56)&0xff]++;
+		} else {
+			histogram[value&0xff]++;
+			histogram[(value>>8)&0xff]++;
+			histogram[(value>>16)&0xff]++;
+			histogram[(value>>24)&0xff]++;
+		}
 	}
 
 	// Calculate weighted sum of histogram values
@@ -505,7 +556,7 @@ static int region_code(struct quirc *q, int x, int y)
 	if (x < 0 || y < 0 || x >= q->w || y >= q->h)
 		return -1;
 
-	pixel = q->pixels[y * q->w + x];
+	pixel = q->pixels_16[y * q->w + x];
 
 	if (pixel >= QUIRC_PIXEL_REGION)
 		return pixel;
@@ -685,7 +736,7 @@ static void test_capstone(struct quirc *q, unsigned int x, unsigned int y,
 
 static void finder_scan(struct quirc *q, unsigned int y)
 {
-	quirc_pixel_t *row = q->pixels + y * q->w;
+	quirc_pixel_t *row = q->pixels_16 + y * q->w;
 	unsigned int x;
 	int last_color = 0;
 	unsigned int run_length = 0;
@@ -855,7 +906,7 @@ static int read_cell(const struct quirc *q, int index, int x, int y)
 	if (p.y < 0 || p.y >= q->h || p.x < 0 || p.x >= q->w)
 		return 0;
 
-	return q->pixels[p.y * q->w + p.x] ? 1 : -1;
+	return q->pixels_16[p.y * q->w + p.x] ? 1 : -1;
 }
 
 static int fitness_cell(const struct quirc *q, int index, int x, int y)
@@ -874,7 +925,7 @@ static int fitness_cell(const struct quirc *q, int index, int x, int y)
 			if (p.y < 0 || p.y >= q->h || p.x < 0 || p.x >= q->w)
 				continue;
 
-			if (q->pixels[p.y * q->w + p.x])
+			if (q->pixels_16[p.y * q->w + p.x])
 				score++;
 			else
 				score--;
@@ -1237,9 +1288,10 @@ static void pixels_setup(struct quirc *q, uint8_t t)
 		q->pixels = (quirc_pixel_t *)q->image;
 	}
 
-	uint8_t* source = q->image;
-	uint8_t* thresh = q->threshold;
-	quirc_pixel_t* dest = q->pixels;
+	uint8_t* source     = q->image_16;
+	uint8_t* thresh     = q->threshold_16;
+	q->pixels_16 = quirc_align_16(q->pixels);
+	quirc_pixel_t* dest = q->pixels_16;
 	//size_t length = quirc_pixel_count(q);
 	uint32_t w = q->w;
 	uint32_t h = q->h;
@@ -1275,7 +1327,7 @@ uint8_t *quirc_begin(struct quirc *q, int *w, int *h)
 
 	q->k = 0.5f;
 
-	return q->image;
+	return q->image_16; //quirc_align_16(q->image);
 }
 
 void quirc_end(struct quirc *q)
