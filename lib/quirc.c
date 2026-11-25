@@ -23,6 +23,10 @@ const char *quirc_version(void)
 	return "1.0";
 }
 
+uint8_t* quirc_pixels(struct quirc* q) {
+	return q->pixels;
+}
+
 struct quirc *quirc_new(void)
 {
 	struct quirc *q = ps_malloc(sizeof(*q));
